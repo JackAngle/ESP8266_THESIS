@@ -41,21 +41,29 @@ void setup() {
 }
  
 void loop() {
-  if(1){
-    /*If*/
+
+  /*Check the number of connected device(s)*/
+  if(WiFi.softAPgetStationNum() == 0){
     if (((unsigned long)(millis() - current)) > 30000){
-      if (turningOffAP() == true){
+      if (turnOffSoftAP() == true){
         WiFi.mode(WIFI_STA);
         delay(1000);
         WiFi.begin(ssid, password);
         Serial.print("Connected to WiFi. IP:");
         Serial.println(WiFi.localIP());
-        current = 100000000;
       }
     }
     delay(3000);
     Serial.println(millis());
   }
+  else if(WiFi.softAPgetStationNum() > 0) {
+    current = millis();
+    Serial.print("Last current time: ");
+    Serial.println(current);
+
+
+    delay(3000);
+    }
 
 // if ( (unsigned long) (millis() - current) > 3000){
 //  WiFiClient client = wifiServer.available();
@@ -89,7 +97,7 @@ void loop() {
 
 
 
-bool turningOffAP(){
+bool turnOffSoftAP(){
     Serial.print("Turning off soft-AP ... ");
     bool result = WiFi.softAPdisconnect(true);
     Serial.println(result? "Off" : "Failed!");
