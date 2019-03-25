@@ -3,15 +3,12 @@
 #include <TypeConversionFunctions.h>
 #include <assert.h>
 #include "DHTesp.h"
+#include <SoftwareSerial.h>
 
 #define AP_MODE_TIME_OUT 60000
 #define AP_MODE 0
 #define STA_MODE 1
 
-#ifdef ESP32
-#pragma message(THIS EXAMPLE IS FOR ESP8266 ONLY!)
-#error Select ESP8266 board.
-#endif
  
 const char* ssid = "Dont Ask";
 const char* password =  "password";
@@ -23,8 +20,8 @@ unsigned long current = 0;
 bool currentMode = 0;
 
 /*MESH WORKS*/
-const char exampleMeshName[] PROGMEM = "ThesisMeshNode_";
-const char exampleWiFiPassword[] PROGMEM = "mustbedone";
+const char MeshName[] PROGMEM = "ThesisMeshNode_";
+const char WiFiPassword[] PROGMEM = "mustbedone";
 
 unsigned int requestNumber = 0;
 unsigned int responseNumber = 0;
@@ -34,7 +31,7 @@ transmission_status_t manageResponse(const String &response, ESP8266WiFiMesh &me
 void networkFilter(int numberOfNetworks, ESP8266WiFiMesh &meshInstance);
 
 /* Create the mesh node object */
-ESP8266WiFiMesh meshNode = ESP8266WiFiMesh(manageRequest, manageResponse, networkFilter, FPSTR(exampleWiFiPassword), FPSTR(exampleMeshName), "", true);
+ESP8266WiFiMesh meshNode = ESP8266WiFiMesh(manageRequest, manageResponse, networkFilter, FPSTR(WiFiPassword), FPSTR(MeshName), "", true);
 
 /**
    Callback for when other nodes send you a request
@@ -52,6 +49,7 @@ String manageRequest(const String &request, ESP8266WiFiMesh &meshInstance) {
   /* Print out received message */
   Serial.print("Request received: ");
   Serial.println(request);
+  WiFi.printDiag(Serial);
 
   /* return a string to send back */
   return ("This is response #" + String(responseNumber++) + " from " + meshInstance.getMeshName() + meshInstance.getNodeID() + ".");
@@ -72,6 +70,7 @@ transmission_status_t manageResponse(const String &response, ESP8266WiFiMesh &me
   Serial.println(meshInstance.getMessage());
   Serial.print(F("Response received: "));
   Serial.println(response);
+    WiFi.printDiag(Serial);
 
   // Our last request got a response, so time to create a new request.
   meshInstance.setMessage(String(F("Ohayou request #")) + String(++requestNumber) + String(F(" from "))
@@ -108,10 +107,9 @@ void networkFilter(int numberOfNetworks, ESP8266WiFiMesh &meshInstance) {
 
 void setup() {
   WiFi.persistent(false);
-  WiFi.printDiag(Serial);
   Serial.begin(115200);
 
-  Serial.setDebugOutput(true);
+  //Serial.setDebugOutput(true);
   dht.setup(D6, DHTesp::DHT22);
 
 
@@ -131,11 +129,13 @@ void setup() {
 
   /* Initialise the mesh node */
   meshNode.begin();
+  if (!meshNode.getAPController())
+  {
+    meshNode.activateAP(); // Each AP requires a separate server port.
+  }
+  //meshNode.setStaticIP(IPAddress(192, 168, 4, 22)); // Activate static IP mode to speed up connection times.
   
-  meshNode.activateAP(); // Each AP requires a separate server port.
-  meshNode.setStaticIP(IPAddress(192, 168, 4, 22)); // Activate static IP mode to speed up connection times.
-  
-  //wifiServer.begin();
+
 
 
 }
@@ -146,6 +146,7 @@ void loop() {
   if (millis() - timeOfLastScan > 3000 // Give other nodes some time to connect between data transfers.
       || (WiFi.status() != WL_CONNECTED && millis() - timeOfLastScan > 2000)) {
     Serial.println(millis());
+    WiFi.printDiag(Serial);
     float humidity = dht.getHumidity();
     float temperature = dht.getTemperature();
 
@@ -157,8 +158,13 @@ void loop() {
     Serial.println();
 
     // Scan for networks with two second intervals when not already connected.
-    String request = String(F("This is request #")) + String(requestNumber) + String(F(" from ")) + meshNode.getMeshName() + meshNode.getNodeID() + String(F("..."));
-    request += String(temperature, 3);
+    String request = String(F("Node #")) + meshNode.getMeshName() + meshNode.getNodeID() + String(F(": "));
+    if (dht.getStatusString() == "OK"){
+      request += String(F("temp..."));
+      request += String(temperature, 1);
+      request += String(F("humd..."));
+      request += String(humidity, 1);
+    }
     meshNode.attemptTransmission(request, false);
     timeOfLastScan = millis();
 
@@ -185,6 +191,7 @@ void loop() {
       }
     }
     Serial.println();
+    
   } else {
     /* Accept any incoming connections */
     meshNode.acceptRequest();
