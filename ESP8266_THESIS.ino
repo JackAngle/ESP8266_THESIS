@@ -42,7 +42,7 @@ unsigned long apStartTimer = 0;
 unsigned long nextApStartTimer = INTERVAL_BETWEEN_AP_MODE;
 //unsigned long apStopTimer = 0;
 unsigned long staStartTimer = 0;
-unsigned long pingBroadcastTimer = 0;
+//unsigned long pingBroadcastTimer = 0;
 unsigned long apSleepTimer = 0;
 bool isAP = false;
 bool isSTA = false;
@@ -140,12 +140,19 @@ String mBuffer = (char*)payload;
         case WStype_TEXT:
             Serial.printf("[%u] get Text: %s\n", num, payload);
             if(mBuffer.startsWith("DATA|")){
-              unsigned long clientSleepTime = AP_WORKING_TIME - currentTime + apSleepTimer + DEEP_SLEEP_TIME/1000 - 5000;
+              /*Read & send tata to Raspberry via Serial1*/
+              String data = mBuffer.substring(mBuffer.indexOf('|') + 1);
+              Serial.println(data);
+              Serial1.println(data);
+
+              /*Send sleep_time to client*/
+              unsigned long clientSleepTime = AP_WORKING_TIME - currentTime + apSleepTimer + DEEP_SLEEP_TIME/1000 - 8000;
               Serial.println(clientSleepTime);
               String request = "AP_SLEEP:" + String(clientSleepTime);
               Serial.println(request);
               webSocket.sendTXT(num, request);
             }
+            
                  
             
             // send message to client
@@ -172,13 +179,6 @@ void setup() {
   dht.setup(D5, DHTesp::DHT22);
   /*Set up Soft-AP*/
   WiFi.mode(WIFI_AP);
-  //Serial.setDebugOutput(true);
-
-//  for(uint8_t t = 4; t > 0; t--) {
-//    Serial.printf("[SETUP] BOOT WAIT %d...\n", t);
-//    Serial.flush();
-//    delay(1000);
-//  }
   Serial.print("Setting soft-AP ... ");
   Serial.println(WiFi.softAP(SERVER_SSID, SERVER_PASSWORD, 1, false, 8)? "Ready" : "Failed!");
 
@@ -189,7 +189,7 @@ void setup() {
   //wifiServer.begin();
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
-  pingBroadcastTimer = millis();
+//  pingBroadcastTimer = millis();
   apStartTimer = millis();
   //nextApStartTimer = apStartTimer + INTERVAL_BETWEEN_AP_MODE;
   Serial.println(apStartTimer);
@@ -277,11 +277,11 @@ void loop() {
     }
 
     if(!isSTA){
-      /*STA -> AP (future will be AP>STA>SLEEP>AP)*/
+      /*Sleep scheduler for STA*/
       if(((unsigned long)(currentTime - staStartTimer)) > STA_MODE_TIMEOUT){
         if(!isWiFiConnected){
           Serial.println("Timeout Deep sleep ");
-          ESP.deepSleep(DEEP_SLEEP_TIME, WAKE_RF_DEFAULT);
+          ESP.deepSleep(random(30, 45)*1000000, WAKE_RF_DEFAULT);
         }
       }
     }else{
@@ -297,24 +297,6 @@ void loop() {
       clientSocket.sendTXT(incoming);
       Serial.println("Done!");  
     }
-//    else if (((unsigned long)(millis() - lastSensorReadTime)) > INTERVAL_BETWEEN_SENSOR_READ) {
-//        if (isServerConnected){
-//        float humidity = dht.getHumidity();
-//        float temperature = dht.getTemperature();
-//        String request = ESP.getChipId()+ String(F(": "));
-//        if (dht.getStatusString() == "OK"){
-//          request += String(temperature, 1);
-//          request += String(humidity, 1);
-//          clientSocket.sendTXT(request);
-//        } else{
-//          request += "000";
-//          request += "000";
-//          clientSocket.sendTXT(request);
-//        }      
-//        Serial.println("sensor");  
-//      } 
-//      lastSensorReadTime = millis();
-//    }
     else{      
       clientSocket.loop();
       }
@@ -329,17 +311,17 @@ void readSensorAndSendToServer(){
           Serial.println("Reading succeeded"); 
           request += String(temperature*10, 0);
           request += String(humidity*10, 0);
-          clientSocket.sendTXT(request);
-
         } else{
            Serial.println("Reading failed");
           request += "000";
-          request += "000";
-          clientSocket.sendTXT(request);
+          request += "000";          
         }  
+        int value = analogRead(A0); 
+        int percent = map(value, 0, 1023, 0, 100);
+        request += String(percent);
+        clientSocket.sendTXT(request);
         Serial.print("Request: ");
-        Serial.println(request);
-         
+        Serial.println(request);       
 }
 
 bool turnOffSoftAP(){
@@ -361,7 +343,6 @@ void convertToStationMode(){
   Serial.print("Connected to WiFi. IP:");
   Serial.println(WiFi.localIP());
   }
-
   
   /*Assign event handler*/
   clientSocket.onEvent(clientSocketEvent);
